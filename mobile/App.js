@@ -77,6 +77,7 @@ export default function App() {
   const [ipAddress, setIpAddress] = useState('');
   const [status, setStatus] = useState(CONNECTION_STATUS.DISCONNECTED);
   const [activeTab, setActiveTab] = useState(TABS.TRACKPAD);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // --------------------------------------------------------------------------
   // Restore persisted IP on mount
@@ -272,34 +273,48 @@ export default function App() {
   // --------------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ExpoStatusBar style="light" />
+    <SafeAreaView style={[styles.safeArea, isFullscreen && styles.safeAreaFullscreen]}>
+      <ExpoStatusBar style="light" hidden={isFullscreen} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.appTitle}>KyroPad</Text>
-        <View style={styles.statusPill}>
-          <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[status] }]} />
-          <Text style={[styles.statusText, { color: STATUS_COLORS[status] }]}>
-            {STATUS_LABELS[status]}
-          </Text>
+      {/* Header (Hidden in Fullscreen) */}
+      {!isFullscreen && (
+        <View style={styles.header}>
+          <Text style={styles.appTitle}>KyroPad</Text>
+          <View style={styles.statusPill}>
+            <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[status] }]} />
+            <Text style={[styles.statusText, { color: STATUS_COLORS[status] }]}>
+              {STATUS_LABELS[status]}
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
 
-      {/* Connection bar */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {renderConnectionBar()}
-      </KeyboardAvoidingView>
+      {/* Connection bar (Hidden in Fullscreen) */}
+      {!isFullscreen && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          {renderConnectionBar()}
+        </KeyboardAvoidingView>
+      )}
 
-      {/* Tab bar */}
-      {renderTabBar()}
+      {/* Tab bar (Hidden in Fullscreen) */}
+      {!isFullscreen && renderTabBar()}
 
       {/* Tab content */}
-      <View style={[styles.content, activeTab === TABS.SCREEN && styles.contentScreen]}>
+      <View
+        style={[
+          styles.content,
+          activeTab === TABS.SCREEN && styles.contentScreen,
+          isFullscreen && styles.contentFullscreen,
+        ]}
+      >
         {activeTab === TABS.SCREEN ? (
-          <ScreenView isConnected={isConnected} />
+          <ScreenView
+            isConnected={isConnected}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={setIsFullscreen}
+          />
         ) : activeTab === TABS.TRACKPAD ? (
           <Trackpad style={styles.trackpad} />
         ) : activeTab === TABS.KEYBOARD ? (
@@ -333,6 +348,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#0d0d0d',
+  },
+  safeAreaFullscreen: {
+    backgroundColor: '#000',
   },
 
   // Header
@@ -449,6 +467,10 @@ const styles = StyleSheet.create({
   },
   contentScreen: {
     padding: 0,
+  },
+  contentFullscreen: {
+    padding: 0,
+    margin: 0,
   },
   trackpad: {
     flex: 1,

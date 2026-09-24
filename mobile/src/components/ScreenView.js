@@ -1,12 +1,12 @@
 /**
- * ScreenView.js — Live PC Screen Mirroring & Interactive Touch Control for KyroPad.
+ * ScreenView.js — Live PC Screen Mirroring with Fullscreen Landscape Mode & Direct Touch Control.
  *
  * Features:
- *  - Real-time multi-monitor streaming (~20-25 FPS)
- *  - Display selector (Display 1, Display 2, All Displays combined)
- *  - Pixel-perfect touch mapping (Tap to click, double-tap, right-click, tap & drag)
- *  - 2-finger scroll
- *  - Quick typing bar to send text to whatever text box is open on your PC
+ *  - Real-time multi-monitor streaming (Display 1, Display 2, All Displays)
+ *  - Fullscreen Landscape toggle with automatic/manual rotation (via expo-screen-orientation)
+ *  - Floating translucent control bar in fullscreen (quick exit, switch monitor, keyboard, HD toggle)
+ *  - Direct touch-to-click, double-click, right-click, tap & drag, and 2-finger scroll
+ *  - Quick-type text input bar
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -21,8 +21,10 @@ import {
   PanResponder,
   Vibration,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import webSocketService from '../services/WebSocketService';
 
 const TAP_MAX_DURATION_MS = 200;
@@ -30,7 +32,7 @@ const TAP_MAX_MOVEMENT_PX = 10;
 const DOUBLE_TAP_MAX_INTERVAL_MS = 300;
 const DOUBLE_TAP_MAX_DISTANCE_PX = 30;
 
-const ScreenView = ({ isConnected }) => {
+const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
   const [frameUri, setFrameUri] = useState(null);
   const [frameInfo, setFrameInfo] = useState({ width: 1920, height: 1080 });
   const [monitors, setMonitors] = useState([
@@ -42,6 +44,7 @@ const ScreenView = ({ isConnected }) => {
   const [isHD, setIsHD] = useState(false);
   const [showKeyboardInput, setShowKeyboardInput] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   const containerLayout = useRef({ width: 0, height: 0, x: 0, y: 0 });
   const imageContainerRef = useRef(null);
@@ -63,6 +66,41 @@ const ScreenView = ({ isConnected }) => {
     dragMovement: 0,
     pendingClickTimer: null,
   });
+
+  // --------------------------------------------------------------------------
+  // Orientation & Fullscreen Lifecycle
+  // --------------------------------------------------------------------------
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!isFullscreen) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        onToggleFullscreen?.(true);
+      } else {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        onToggleFullscreen?.(false);
+      }
+    } catch (err) {
+      console.warn('Orientation lock error:', err);
+    }
+  };
+
+  // Listen to physical device orientation changes
+  useEffect(() => {
+    const subscription = ScreenOrientation.addOrientationChangeListener((evt) => {
+      const orientation = evt.orientationInfo.orientation;
+      const isLandscape =
+        orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+        orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+      onToggleFullscreen?.(isLandscape);
+    });
+
+    return () => {
+      ScreenOrientation.removeOrientationChangeListener(subscription);
+      // Reset to portrait on unmount
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [onToggleFullscreen]);
 
   // --------------------------------------------------------------------------
   // WebSocket Message Routing for Screen Frames
@@ -99,8 +137,8 @@ const ScreenView = ({ isConnected }) => {
       webSocketService.send({
         type: 'screen_stream_start',
         monitor: monitorId,
-        quality: highQuality ? 75 : 60,
-        fps: highQuality ? 20 : 24,
+        quality: highQuality ? 75 : 55,
+        fps: highQuality ? 20 : 25,
       });
     },
     [isConnected],
@@ -311,7 +349,7 @@ const ScreenView = ({ isConnected }) => {
             });
             state.lastTapReleaseTime = 0;
           } else {
-            // Single tap -> Left click at point (deferred by 180ms for double-tap detection)
+            // Single tap -> Left click at point
             state.lastTapReleaseTime = now;
             state.lastTapStartX = touch.pageX;
             state.lastTapStartY = touch.pageY;
@@ -371,65 +409,81 @@ const ScreenView = ({ isConnected }) => {
   // --------------------------------------------------------------------------
 
   return (
-    <View style={styles.container}>
-      {/* Monitor Selector Bar */}
-      <View style={styles.monitorBar}>
-        {monitors.map((mon) => {
-          const isSelected = selectedMonitor === mon.id;
-          return (
-            <TouchableOpacity
-              key={mon.id}
-              style={[styles.monitorBtn, isSelected && styles.monitorBtnActive]}
-              onPress={() => setSelectedMonitor(mon.id)}
-            >
-              <Ionicons
-                name="tv-outline"
-                size={14}
-                color={isSelected ? '#00e5ff' : '#777'}
-              />
-              <Text
-                style={[
-                  styles.monitorBtnText,
-                  isSelected && styles.monitorBtnTextActive,
-                ]}
-                numberOfLines={1}
+    <View style={[styles.container, isFullscreen && styles.containerFullscreen]}>
+      <StatusBar hidden={isFullscreen} />
+
+      {/* Top Bar (Portrait Mode) */}
+      {!isFullscreen && (
+        <View style={styles.monitorBar}>
+          {monitors.map((mon) => {
+            const isSelected = selectedMonitor === mon.id;
+            return (
+              <TouchableOpacity
+                key={mon.id}
+                style={[styles.monitorBtn, isSelected && styles.monitorBtnActive]}
+                onPress={() => setSelectedMonitor(mon.id)}
               >
-                {mon.name.replace(' (Primary)', '')}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Ionicons
+                  name="tv-outline"
+                  size={13}
+                  color={isSelected ? '#00e5ff' : '#777'}
+                />
+                <Text
+                  style={[
+                    styles.monitorBtnText,
+                    isSelected && styles.monitorBtnTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {mon.name.replace(' (Primary)', '')}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
 
-        {/* Quality Toggle */}
-        <TouchableOpacity
-          style={[styles.controlIconBtn, isHD && styles.controlIconBtnActive]}
-          onPress={() => setIsHD((prev) => !prev)}
-        >
-          <Text style={[styles.controlText, isHD && styles.controlTextActive]}>
-            {isHD ? 'HD' : 'FAST'}
-          </Text>
-        </TouchableOpacity>
+          {/* Fullscreen Landscape Toggle */}
+          <TouchableOpacity
+            style={[styles.controlIconBtn, styles.fullscreenBtn]}
+            onPress={toggleFullscreen}
+            accessibilityLabel="Toggle Fullscreen Landscape"
+          >
+            <Ionicons name="scan-outline" size={15} color="#00e5ff" />
+          </TouchableOpacity>
 
-        {/* Keyboard Toggle */}
-        <TouchableOpacity
-          style={[
-            styles.controlIconBtn,
-            showKeyboardInput && styles.controlIconBtnActive,
-          ]}
-          onPress={() => setShowKeyboardInput((prev) => !prev)}
-        >
-          <Ionicons
-            name="keypad"
-            size={16}
-            color={showKeyboardInput ? '#00e5ff' : '#888'}
-          />
-        </TouchableOpacity>
-      </View>
+          {/* Quality Toggle */}
+          <TouchableOpacity
+            style={[styles.controlIconBtn, isHD && styles.controlIconBtnActive]}
+            onPress={() => setIsHD((prev) => !prev)}
+          >
+            <Text style={[styles.controlText, isHD && styles.controlTextActive]}>
+              {isHD ? 'HD' : 'FAST'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Keyboard Toggle */}
+          <TouchableOpacity
+            style={[
+              styles.controlIconBtn,
+              showKeyboardInput && styles.controlIconBtnActive,
+            ]}
+            onPress={() => setShowKeyboardInput((prev) => !prev)}
+          >
+            <Ionicons
+              name="keypad"
+              size={15}
+              color={showKeyboardInput ? '#00e5ff' : '#888'}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Screen Frame Display Area */}
       <View
         ref={imageContainerRef}
-        style={styles.screenFrameWrapper}
+        style={[
+          styles.screenFrameWrapper,
+          isFullscreen && styles.screenFrameWrapperFullscreen,
+        ]}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout;
           if (imageContainerRef.current) {
@@ -463,11 +517,60 @@ const ScreenView = ({ isConnected }) => {
             </Text>
           </View>
         )}
+
+        {/* Floating Controls Overlay (In Fullscreen Landscape Mode) */}
+        {isFullscreen && controlsVisible && (
+          <View style={styles.floatingControls}>
+            {/* Exit Fullscreen Button */}
+            <TouchableOpacity
+              style={styles.floatingBtn}
+              onPress={toggleFullscreen}
+              accessibilityLabel="Exit Fullscreen"
+            >
+              <Ionicons name="contract-outline" size={18} color="#fff" />
+              <Text style={styles.floatingBtnText}>Exit</Text>
+            </TouchableOpacity>
+
+            {/* Next Monitor Quick Switch */}
+            <TouchableOpacity
+              style={styles.floatingBtn}
+              onPress={() => {
+                const currentIdx = monitors.findIndex((m) => m.id === selectedMonitor);
+                const nextIdx = (currentIdx + 1) % monitors.length;
+                setSelectedMonitor(monitors[nextIdx].id);
+              }}
+            >
+              <Ionicons name="tv-outline" size={16} color="#00e5ff" />
+              <Text style={styles.floatingBtnText}>
+                {selectedMonitor === 0
+                  ? 'All'
+                  : selectedMonitor === 1
+                  ? 'Disp 1'
+                  : 'Disp 2'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Keyboard Button */}
+            <TouchableOpacity
+              style={[
+                styles.floatingBtn,
+                showKeyboardInput && styles.floatingBtnActive,
+              ]}
+              onPress={() => setShowKeyboardInput((prev) => !prev)}
+            >
+              <Ionicons
+                name="keypad-outline"
+                size={16}
+                color={showKeyboardInput ? '#00e5ff' : '#fff'}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Quick Typing Input Bar (When Keyboard Toggled) */}
       {showKeyboardInput && (
-        <View style={styles.quickInputBar}>
+        <View style={[styles.quickInputBar, isFullscreen && styles.quickInputBarFullscreen]}>
           <TextInput
             style={styles.quickTextInput}
             placeholder="Type text to send to PC…"
@@ -479,12 +582,9 @@ const ScreenView = ({ isConnected }) => {
             autoFocus
           />
           <TouchableOpacity style={styles.sendBtn} onPress={handleSendText}>
-            <Text style={styles.sendBtnText}>Type</Text>
+            <Text style={styles.sendBtnText}>Send</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.keyBtn}
-            onPress={handleSendBackspace}
-          >
+          <TouchableOpacity style={styles.keyBtn} onPress={handleSendBackspace}>
             <Ionicons name="backspace-outline" size={18} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.keyBtn} onPress={handleSendEnter}>
@@ -493,12 +593,14 @@ const ScreenView = ({ isConnected }) => {
         </View>
       )}
 
-      {/* Touch Interaction Instructions */}
-      <View style={styles.hintBar}>
-        <Text style={styles.hintText}>
-          👆 Tap = Click • Double-Tap = Open • Drag = Move Window • 2-Finger Slide = Scroll
-        </Text>
-      </View>
+      {/* Touch Interaction Instructions (Portrait Mode only) */}
+      {!isFullscreen && (
+        <View style={styles.hintBar}>
+          <Text style={styles.hintText}>
+            👆 Tap = Click • Double-Tap = Open • Drag = Move Window • ⛶ = Fullscreen
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -511,6 +613,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0d0d0d',
+  },
+  containerFullscreen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999,
+    backgroundColor: '#000',
   },
   monitorBar: {
     flexDirection: 'row',
@@ -528,7 +639,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#1a1a1a',
     paddingVertical: 7,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderRadius: 8,
     gap: 4,
     borderWidth: 1,
@@ -550,12 +661,16 @@ const styles = StyleSheet.create({
   controlIconBtn: {
     backgroundColor: '#1a1a1a',
     paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  fullscreenBtn: {
+    backgroundColor: '#002b3d',
+    borderColor: '#00e5ff',
   },
   controlIconBtnActive: {
     backgroundColor: '#002b3d',
@@ -576,6 +691,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
+  screenFrameWrapperFullscreen: {
+    backgroundColor: '#000',
+    width: '100%',
+    height: '100%',
+  },
   screenImage: {
     width: '100%',
     height: '100%',
@@ -589,6 +709,38 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 13,
   },
+  floatingControls: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'rgba(20, 20, 20, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    zIndex: 1000,
+  },
+  floatingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+    backgroundColor: 'rgba(40, 40, 40, 0.8)',
+  },
+  floatingBtnActive: {
+    backgroundColor: '#002b3d',
+    borderColor: '#00e5ff',
+  },
+  floatingBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   quickInputBar: {
     flexDirection: 'row',
     paddingHorizontal: 10,
@@ -598,6 +750,14 @@ const styles = StyleSheet.create({
     borderTopColor: '#222',
     gap: 6,
     alignItems: 'center',
+  },
+  quickInputBarFullscreen: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1001,
+    backgroundColor: 'rgba(20, 20, 20, 0.95)',
   },
   quickTextInput: {
     flex: 1,

@@ -4,7 +4,7 @@
     "slug": "kyropad",
     "version": "1.0.0",
     "sdkVersion": "57.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
