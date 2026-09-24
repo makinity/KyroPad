@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "KyroPad",
+    "slug": "kyropad",
+    "version": "1.0.0",
+    "sdkVersion": "57.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d0d0d"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.makinity.windeck"
+    },
+    "android": {
+      "package": "com.makinity.windeck",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d0d0d"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e0ef4a70-f5c0-4fe9-ba9d-4eb4e1a8ff73"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# WinDeck Remote — Server Dependencies
+# Python 3.10+ required
+
+# WebSocket server
+websockets==12.0
+
+# Input simulation (mouse, keyboard)
+pynput==1.7.6
+
+# System tray icon
+pystray==0.19.5
+
+# Image creation & screen capture
+Pillow==10.3.0
+mss==10.2.0
+
+# PyInstaller for packaging to .exe (dev dependency)
+pyinstaller==6.6.0
