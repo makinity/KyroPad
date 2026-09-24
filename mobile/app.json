@@ -6,22 +6,53 @@
     "sdkVersion": "57.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
+    "backgroundColor": "#0d0d0d",
+    "primaryColor": "#00e5ff",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0d0d0d"
+      "backgroundColor": "#0d0d0d",
+      "dark": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0d0d0d"
+      }
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.makinity.windeck"
+      "userInterfaceStyle": "dark",
+      "backgroundColor": "#0d0d0d",
+      "bundleIdentifier": "com.makinity.kyropad",
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0d0d0d",
+        "dark": {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0d0d0d"
+        }
+      }
     },
     "android": {
-      "package": "com.makinity.windeck",
+      "package": "com.makinity.kyropad",
       "usesCleartextTraffic": true,
+      "userInterfaceStyle": "dark",
+      "backgroundColor": "#0d0d0d",
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0d0d0d",
+        "dark": {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0d0d0d"
+        }
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0d0d0d"
