@@ -226,8 +226,49 @@ screenCapturer = ScreenCapturer()
 
 
 # ---------------------------------------------------------------------------
-# Touch coordinate mapping & interaction
+# Touch coordinate mapping & interaction (Multi-Monitor Virtual Desktop Aware)
 # ---------------------------------------------------------------------------
+
+MOUSEEVENTF_MOVE = 0x0001
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
+MOUSEEVENTF_ABSOLUTE = 0x8000
+MOUSEEVENTF_VIRTUALDESK = 0x4000
+
+
+def _sendVirtualDesktopMouseEvent(target_x: int, target_y: int, flags: int = 0) -> None:
+    """
+    Send mouse input mapped across the entire multi-monitor virtual desktop.
+    Handles negative offsets and secondary monitors seamlessly.
+    """
+    SM_XVIRTUALSCREEN = 76
+    SM_YVIRTUALSCREEN = 77
+    SM_CXVIRTUALSCREEN = 78
+    SM_CYVIRTUALSCREEN = 79
+
+    v_left = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    v_top = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    v_w = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    v_h = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+
+    # Position cursor directly using physical screen coordinates
+    try:
+        user32.SetCursorPos(int(target_x), int(target_y))
+    except Exception:
+        pass
+
+    if v_w > 0 and v_h > 0:
+        # Normalize target coordinates to 0..65535 across virtual desktop
+        fx = int(((target_x - v_left) / float(v_w)) * 65535)
+        fy = int(((target_y - v_top) / float(v_h)) * 65535)
+
+        combined_flags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK | flags
+        user32.mouse_event(combined_flags, fx, fy, 0, 0)
+    elif flags:
+        user32.mouse_event(flags, 0, 0, 0, 0)
+
 
 def mapNormalizedTouch(monitor_id: int, norm_x: float, norm_y: float) -> Tuple[int, int]:
     """
@@ -246,19 +287,27 @@ def touchClick(monitor_id: int, norm_x: float, norm_y: float, button: str = "lef
     """Move cursor to normalized coordinate and click."""
     try:
         x, y = mapNormalizedTouch(monitor_id, norm_x, norm_y)
-        _mouse.position = (x, y)
-        btn = Button.left if button == "left" else Button.right
-        _mouse.click(btn)
+        down_flag = MOUSEEVENTF_LEFTDOWN if button == "left" else MOUSEEVENTF_RIGHTDOWN
+        up_flag = MOUSEEVENTF_LEFTUP if button == "left" else MOUSEEVENTF_RIGHTUP
+
+        # Move and press down
+        _sendVirtualDesktopMouseEvent(x, y, down_flag)
+        # Release up
+        _sendVirtualDesktopMouseEvent(x, y, up_flag)
     except Exception as exc:
-        logger.warning("touchClick failed: %s", exc)
+        logger.warning("touchClick failed (monitor=%d): %s", monitor_id, exc)
 
 
 def touchDoubleClick(monitor_id: int, norm_x: float, norm_y: float) -> None:
     """Move cursor to normalized coordinate and double click."""
     try:
         x, y = mapNormalizedTouch(monitor_id, norm_x, norm_y)
-        _mouse.position = (x, y)
-        _mouse.click(Button.left, count=2)
+        # Click 1
+        _sendVirtualDesktopMouseEvent(x, y, MOUSEEVENTF_LEFTDOWN)
+        _sendVirtualDesktopMouseEvent(x, y, MOUSEEVENTF_LEFTUP)
+        # Click 2
+        _sendVirtualDesktopMouseEvent(x, y, MOUSEEVENTF_LEFTDOWN)
+        _sendVirtualDesktopMouseEvent(x, y, MOUSEEVENTF_LEFTUP)
     except Exception as exc:
         logger.warning("touchDoubleClick failed: %s", exc)
 
@@ -267,9 +316,8 @@ def touchDown(monitor_id: int, norm_x: float, norm_y: float, button: str = "left
     """Move cursor to normalized coordinate and press button down (for drag)."""
     try:
         x, y = mapNormalizedTouch(monitor_id, norm_x, norm_y)
-        _mouse.position = (x, y)
-        btn = Button.left if button == "left" else Button.right
-        _mouse.press(btn)
+        down_flag = MOUSEEVENTF_LEFTDOWN if button == "left" else MOUSEEVENTF_RIGHTDOWN
+        _sendVirtualDesktopMouseEvent(x, y, down_flag)
     except Exception as exc:
         logger.warning("touchDown failed: %s", exc)
 
@@ -278,7 +326,7 @@ def touchMove(monitor_id: int, norm_x: float, norm_y: float) -> None:
     """Move cursor to normalized coordinate."""
     try:
         x, y = mapNormalizedTouch(monitor_id, norm_x, norm_y)
-        _mouse.position = (x, y)
+        _sendVirtualDesktopMouseEvent(x, y, 0)
     except Exception as exc:
         logger.warning("touchMove failed: %s", exc)
 
@@ -287,8 +335,8 @@ def touchUp(monitor_id: int, norm_x: float, norm_y: float, button: str = "left")
     """Move cursor and release button."""
     try:
         x, y = mapNormalizedTouch(monitor_id, norm_x, norm_y)
-        _mouse.position = (x, y)
-        btn = Button.left if button == "left" else Button.right
-        _mouse.release(btn)
+        up_flag = MOUSEEVENTF_LEFTUP if button == "left" else MOUSEEVENTF_RIGHTUP
+        _sendVirtualDesktopMouseEvent(x, y, up_flag)
     except Exception as exc:
         logger.warning("touchUp failed: %s", exc)
+
