@@ -46,6 +46,12 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
   const [inputText, setInputText] = useState('');
   const [controlsVisible, setControlsVisible] = useState(true);
 
+  const selectedMonitorRef = useRef(selectedMonitor);
+  selectedMonitorRef.current = selectedMonitor;
+
+  const frameInfoRef = useRef(frameInfo);
+  frameInfoRef.current = frameInfo;
+
   const containerLayout = useRef({ width: 0, height: 0, x: 0, y: 0 });
   const imageContainerRef = useRef(null);
 
@@ -170,9 +176,9 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
     const { width: cW, height: cH, x: cX, y: cY } = containerLayout.current;
     if (cW === 0 || cH === 0) return { x: 0.5, y: 0.5 };
 
-    const { width: imgW, height: imgH } = frameInfo;
-    const imgAspect = imgW / imgH;
-    const containerAspect = cW / cH;
+    const { width: imgW, height: imgH } = frameInfoRef.current;
+    const imgAspect = imgW / (imgH || 1);
+    const containerAspect = cW / (cH || 1);
 
     let renderedW, renderedH, offsetX, offsetY;
 
@@ -191,8 +197,8 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
     const localX = touchPageX - cX;
     const localY = touchPageY - cY;
 
-    const normX = Math.max(0.0, Math.min(1.0, (localX - offsetX) / renderedW));
-    const normY = Math.max(0.0, Math.min(1.0, (localY - offsetY) / renderedH));
+    const normX = Math.max(0.0, Math.min(1.0, (localX - offsetX) / (renderedW || 1)));
+    const normY = Math.max(0.0, Math.min(1.0, (localY - offsetY) / (renderedH || 1)));
 
     return { x: normX, y: normY };
   };
@@ -241,7 +247,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
             Vibration.vibrate(10);
             webSocketService.send({
               type: 'screen_touch_down',
-              monitor: selectedMonitor,
+              monitor: selectedMonitorRef.current,
               x,
               y,
               button: 'left',
@@ -267,7 +273,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
             const { x, y } = getNormalizedCoords(touch.pageX, touch.pageY);
             webSocketService.send({
               type: 'screen_touch_move',
-              monitor: selectedMonitor,
+              monitor: selectedMonitorRef.current,
               x,
               y,
             });
@@ -278,7 +284,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
             const { x, y } = getNormalizedCoords(touches[0].pageX, touches[0].pageY);
             webSocketService.send({
               type: 'screen_touch_up',
-              monitor: selectedMonitor,
+              monitor: selectedMonitorRef.current,
               x,
               y,
               button: 'left',
@@ -316,7 +322,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
         if (state.isDragging) {
           webSocketService.send({
             type: 'screen_touch_up',
-            monitor: selectedMonitor,
+            monitor: selectedMonitorRef.current,
             x,
             y,
             button: 'left',
@@ -327,7 +333,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
           if (state.dragMovement < TAP_MAX_MOVEMENT_PX) {
             webSocketService.send({
               type: 'screen_touch_double_click',
-              monitor: selectedMonitor,
+              monitor: selectedMonitorRef.current,
               x,
               y,
             });
@@ -342,7 +348,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
             Vibration.vibrate(10);
             webSocketService.send({
               type: 'screen_touch_click',
-              monitor: selectedMonitor,
+              monitor: selectedMonitorRef.current,
               x,
               y,
               button: 'right',
@@ -358,7 +364,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
               Vibration.vibrate(6);
               webSocketService.send({
                 type: 'screen_touch_click',
-                monitor: selectedMonitor,
+                monitor: selectedMonitorRef.current,
                 x,
                 y,
                 button: 'left',
