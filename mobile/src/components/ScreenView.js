@@ -21,6 +21,7 @@ import {
   PanResponder,
   Vibration,
   Platform,
+  Dimensions,
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -87,11 +88,12 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
         onToggleFullscreen?.(false);
       }
     } catch (err) {
-      console.warn('Orientation lock error:', err);
+      // In web browsers, programmatic lock is not permitted; toggle UI state directly
+      onToggleFullscreen?.(!isFullscreen);
     }
   };
 
-  // Listen to physical device orientation changes
+  // Listen to physical device orientation changes (both native & web)
   useEffect(() => {
     const subscription = ScreenOrientation.addOrientationChangeListener((evt) => {
       const orientation = evt.orientationInfo.orientation;
@@ -101,9 +103,16 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
       onToggleFullscreen?.(isLandscape);
     });
 
+    const dimSub = Dimensions.addEventListener('change', ({ window }) => {
+      if (Platform.OS === 'web') {
+        const isLandscape = window.width > window.height;
+        onToggleFullscreen?.(isLandscape);
+      }
+    });
+
     return () => {
       ScreenOrientation.removeOrientationChangeListener(subscription);
-      // Reset to portrait on unmount
+      dimSub?.remove();
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     };
   }, [onToggleFullscreen]);

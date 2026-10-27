@@ -76,8 +76,10 @@ class WebSocketService {
    * @param {string} hostIp  Raw IP address, e.g. "192.168.1.5"
    */
   connect(hostIp) {
-    // Trim whitespace to avoid subtle connection failures from user input.
-    const cleanIp = hostIp.trim();
+    let cleanIp = hostIp.trim().replace(/^https?:\/\//i, '').replace(/^wss?:\/\//i, '');
+    if (cleanIp.includes(':')) {
+      cleanIp = cleanIp.split(':')[0];
+    }
     this._url = `ws://${cleanIp}:8080`;
     this._intentionallyConnected = true;
     this._reconnectDelay = RECONNECT_BASE_DELAY_MS;

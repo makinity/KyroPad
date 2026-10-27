@@ -14,7 +14,10 @@ import logging
 import threading
 import sys
 import io
-from typing import Optional
+import http
+import mimetypes
+from pathlib import Path
+from typing import Optional, Any
 
 import websockets
 from PIL import Image, ImageDraw
@@ -38,8 +41,53 @@ logger = logging.getLogger("windeck.server")
 
 HOST = "0.0.0.0"
 PORT = 8080
+WEB_DIR = (Path(__file__).parent / "web").resolve()
 
 import screen_stream
+
+# ---------------------------------------------------------------------------
+# HTTP Static Web App Handler (for PWA)
+# ---------------------------------------------------------------------------
+
+async def processHttpRequest(path: str, request_headers: Any):
+    """
+    Serve static PWA web files on standard HTTP GET requests.
+    If the request is a WebSocket upgrade, return None to proceed with the WS handshake.
+    """
+    # If client is requesting a WebSocket upgrade, pass through to WebSocket handler
+    if request_headers.get("Upgrade", "").lower() == "websocket":
+        return None
+
+    clean_path = path.split("?")[0].lstrip("/")
+    target = (WEB_DIR / clean_path).resolve()
+
+    # Prevent directory traversal attacks outside WEB_DIR
+    if not str(target).startswith(str(WEB_DIR)):
+        target = WEB_DIR / "index.html"
+
+    # Fallback to index.html for root path or SPA client-side routing
+    if target.is_dir() or not target.exists():
+        target = WEB_DIR / "index.html"
+
+    if not target.exists():
+        return (http.HTTPStatus.NOT_FOUND, [("Content-Type", "text/plain")], b"404 Not Found")
+
+    ctype, _ = mimetypes.guess_type(str(target))
+    ctype = ctype or "application/octet-stream"
+
+    try:
+        with open(target, "rb") as f:
+            body = f.read()
+        headers = [
+            ("Content-Type", ctype),
+            ("Content-Length", str(len(body))),
+            ("Cache-Control", "no-cache" if target.suffix in (".html", ".json") else "public, max-age=31536000"),
+        ]
+        return (http.HTTPStatus.OK, headers, body)
+    except Exception as exc:
+        logger.warning("Failed to read static file %s: %s", target, exc)
+        return (http.HTTPStatus.INTERNAL_SERVER_ERROR, [("Content-Type", "text/plain")], b"500 Internal Server Error")
+
 
 # ---------------------------------------------------------------------------
 # WebSocket message handler
@@ -237,10 +285,11 @@ async def runServer() -> None:
     global _stopEvent
     _stopEvent = asyncio.Event()
 
-    logger.info("WinDeck Remote server starting on ws://%s:%d", HOST, PORT)
+    logger.info("KyroPad server starting on http://%s:%d and ws://%s:%d", HOST, PORT, HOST, PORT)
+    logger.info("Serving Web App from: %s", WEB_DIR)
 
-    async with websockets.serve(handleMessage, HOST, PORT):
-        logger.info("Server ready. Waiting for connections...")
+    async with websockets.serve(handleMessage, HOST, PORT, process_request=processHttpRequest):
+        logger.info("Server ready. Open http://<your-pc-ip>:%d on your phone to connect!", PORT)
         await _stopEvent.wait()
 
     logger.info("Server shut down.")

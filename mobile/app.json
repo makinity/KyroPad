@@ -26,6 +26,12 @@
         "backgroundColor": "#0d0d0d"
       }
     },
+    "web": {
+      "favicon": "./assets/icon.png",
+      "bundler": "metro",
+      "themeColor": "#0d0d0d",
+      "backgroundColor": "#0d0d0d"
+    },
     "extra": {
       "eas": {
         "projectId": "e0ef4a70-f5c0-4fe9-ba9d-4eb4e1a8ff73"

@@ -80,15 +80,56 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // --------------------------------------------------------------------------
-  // Restore persisted IP on mount
+  // Restore persisted IP on mount & Auto-connect on Web
   // --------------------------------------------------------------------------
 
   useEffect(() => {
+    // Inject mobile-web PWA and touch gesture safety styles
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const styleId = 'kyropad-web-styles';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          html, body, #root {
+            height: 100% !important;
+            width: 100% !important;
+            margin: 0;
+            padding: 0;
+            overflow: hidden !important;
+            touch-action: none !important;
+            -webkit-touch-callout: none !important;
+            -webkit-user-select: none !important;
+            user-select: none !important;
+            overscroll-behavior: none !important;
+            background-color: #0d0d0d !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+
     const loadSavedIp = async () => {
       try {
-        const savedIp = await AsyncStorage.getItem(STORAGE_KEY_LAST_IP);
-        if (savedIp) {
-          setIpAddress(savedIp);
+        let initialIp = '';
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+          initialIp = window.location.hostname;
+        }
+
+        if (!initialIp) {
+          const savedIp = await AsyncStorage.getItem(STORAGE_KEY_LAST_IP);
+          if (savedIp) {
+            initialIp = savedIp;
+          }
+        }
+
+        if (initialIp) {
+          setIpAddress(initialIp);
+          // If accessing via web browser, auto-connect immediately to the host PC
+          if (Platform.OS === 'web') {
+            setStatus(CONNECTION_STATUS.CONNECTING);
+            webSocketService.connect(initialIp);
+          }
         }
       } catch (err) {
         console.warn('Failed to load saved IP:', err);
