@@ -34,7 +34,7 @@ const DOUBLE_TAP_MAX_INTERVAL_MS = 300;
 const DOUBLE_TAP_MAX_DISTANCE_PX = 30;
 
 const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
-  const [frameUri, setFrameUri] = useState(null);
+  const [hasFrame, setHasFrame] = useState(false);
   const [frameInfo, setFrameInfo] = useState({ width: 1920, height: 1080 });
   const [monitors, setMonitors] = useState([
     { id: 2, name: 'Display 2 (Primary)', is_primary: true },
@@ -46,6 +46,16 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
   const [showKeyboardInput, setShowKeyboardInput] = useState(false);
   const [inputText, setInputText] = useState('');
   const [controlsVisible, setControlsVisible] = useState(true);
+
+  // Web HTML5 Canvas ref for atomic 0-flicker frame drawing
+  const canvasRef = useRef(null);
+
+  // Native Double-Buffering
+  const [bufferA, setBufferA] = useState(null);
+  const [bufferB, setBufferB] = useState(null);
+  const [frontBuffer, setFrontBuffer] = useState('A');
+  const activeBufferRef = useRef('A');
+  activeBufferRef.current = frontBuffer;
 
   const selectedMonitorRef = useRef(selectedMonitor);
   selectedMonitorRef.current = selectedMonitor;
@@ -125,9 +135,44 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
     const handleMessage = (data) => {
       if (!data) return;
       if (data.type === 'screen_frame') {
-        setFrameUri(data.image);
+        if (!hasFrame) {
+          setHasFrame(true);
+        }
+
         if (data.width && data.height) {
-          setFrameInfo({ width: data.width, height: data.height });
+          if (
+            frameInfoRef.current.width !== data.width ||
+            frameInfoRef.current.height !== data.height
+          ) {
+            setFrameInfo({ width: data.width, height: data.height });
+          }
+        }
+
+        if (Platform.OS === 'web') {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const offscreen = new window.Image();
+            offscreen.onload = () => {
+              if (canvas.width !== offscreen.naturalWidth) {
+                canvas.width = offscreen.naturalWidth;
+              }
+              if (canvas.height !== offscreen.naturalHeight) {
+                canvas.height = offscreen.naturalHeight;
+              }
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(offscreen, 0, 0);
+              }
+            };
+            offscreen.src = data.image;
+          }
+        } else {
+          // Native double-buffering
+          if (activeBufferRef.current === 'A') {
+            setBufferB(data.image);
+          } else {
+            setBufferA(data.image);
+          }
         }
       } else if (data.type === 'monitors_list') {
         if (Array.isArray(data.monitors) && data.monitors.length > 0) {
@@ -140,7 +185,7 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [hasFrame]);
 
   // --------------------------------------------------------------------------
   // Stream Lifecycle Management
@@ -169,7 +214,9 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
       webSocketService.send({ type: 'get_monitors' });
       startStream(selectedMonitor, isHD);
     } else {
-      setFrameUri(null);
+      setHasFrame(false);
+      setBufferA(null);
+      setBufferB(null);
     }
 
     return () => {
@@ -516,13 +563,48 @@ const ScreenView = ({ isConnected, isFullscreen, onToggleFullscreen }) => {
         }}
         {...panResponder.panHandlers}
       >
-        {frameUri ? (
-          <Image
-            source={{ uri: frameUri }}
-            style={styles.screenImage}
-            resizeMode="contain"
-          />
+        {/* Frame Rendering: Canvas on Web, Double-Buffer on Native */}
+        {Platform.OS === 'web' ? (
+          React.createElement('canvas', {
+            ref: canvasRef,
+            style: {
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: hasFrame ? 'block' : 'none',
+              pointerEvents: 'none',
+            },
+          })
         ) : (
+          <>
+            {bufferA && (
+              <Image
+                source={{ uri: bufferA }}
+                style={[
+                  styles.screenImage,
+                  { position: 'absolute', opacity: frontBuffer === 'A' ? 1 : 0 },
+                ]}
+                resizeMode="contain"
+                fadeDuration={0}
+                onLoad={() => setFrontBuffer('A')}
+              />
+            )}
+            {bufferB && (
+              <Image
+                source={{ uri: bufferB }}
+                style={[
+                  styles.screenImage,
+                  { position: 'absolute', opacity: frontBuffer === 'B' ? 1 : 0 },
+                ]}
+                resizeMode="contain"
+                fadeDuration={0}
+                onLoad={() => setFrontBuffer('B')}
+              />
+            )}
+          </>
+        )}
+
+        {!hasFrame && (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#00e5ff" />
             <Text style={styles.loadingText}>

@@ -16,6 +16,7 @@ import sys
 import io
 import http
 import mimetypes
+import socket
 from pathlib import Path
 from typing import Optional, Any
 
@@ -280,16 +281,31 @@ async def handleMessage(websocket) -> None:
 _stopEvent: asyncio.Event | None = None
 
 
+def getLocalIp() -> str:
+    """Detect the active local LAN IPv4 address."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
 async def runServer() -> None:
     """Start the WebSocket server and block until the stop event is set."""
     global _stopEvent
     _stopEvent = asyncio.Event()
 
-    logger.info("KyroPad server starting on http://%s:%d and ws://%s:%d", HOST, PORT, HOST, PORT)
-    logger.info("Serving Web App from: %s", WEB_DIR)
+    local_ip = getLocalIp()
+    logger.info("==================================================")
+    logger.info("           KYROPAD SERVER READY                   ")
+    logger.info("  👉 Phone Web App:  http://%s:%d", local_ip, PORT)
+    logger.info("  👉 Alternative:    http://msi.local:%d", PORT)
+    logger.info("==================================================")
 
     async with websockets.serve(handleMessage, HOST, PORT, process_request=processHttpRequest):
-        logger.info("Server ready. Open http://<your-pc-ip>:%d on your phone to connect!", PORT)
         await _stopEvent.wait()
 
     logger.info("Server shut down.")
