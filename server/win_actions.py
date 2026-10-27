@@ -22,12 +22,15 @@ _keyboard = KeyboardController()
 # Mouse
 # ---------------------------------------------------------------------------
 
+user32 = ctypes.windll.user32
+MOUSEEVENTF_MOVE = 0x0001
+
+
 def moveMouse(dx: float, dy: float) -> None:
     """Move the mouse cursor by a relative offset (dx, dy)."""
     try:
-        _mouse.move(dx, dy)
+        user32.mouse_event(MOUSEEVENTF_MOVE, int(round(dx)), int(round(dy)), 0, 0)
     except Exception as exc:
-        # Log but never raise — a bad move event should not crash the server.
         logger.warning("moveMouse failed: %s", exc)
 
 
